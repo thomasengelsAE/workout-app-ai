@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+
+model User {
+  id         String   @id @default(cuid())
+  keycloakId String   @unique
+  username   String   @unique
+  email      String   @unique
+  createdAt  DateTime @default(now())
+
+  onboardingProfile OnboardingProfile?
+  injuries          Injury[]
+  goal              Goal?
+  workoutPlans      WorkoutPlan[]
+  progressPhotos    ProgressPhoto[]
+  nutritionNudges   NutritionNudge[]
+
+  @@index([keycloakId])
+}
+
+// ─── Onboarding ──────────────────────────────────────────────────────────────
+
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
+enum ExperienceLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ELITE
+}
+
+enum GymFocus {
+  BODYBUILDING
+  POWERLIFTING
+  CROSSFIT
+  GENERAL_FITNESS
+  SPORT_SPECIFIC
+}
+
+enum Activity {
+  FITNESS
+  CROSSFIT
+  HYROX
+  PILATES
+  YOGA
+  RUNNING
+  SWIMMING
+  CYCLING
+}
+
+model OnboardingProfile {
+  id             String          @id @default(cuid())
+  gender         Gender
+  age            Int
+  heightCm       Float
+  weightKg       Float
+  experienceLevel ExperienceLevel
+  gymFocus       GymFocus
+  activities     Activity[]
+  weeklyDays     Int
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Injury {
+  id          String   @id @default(cuid())
+  description String
+  createdAt   DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─── Goal & Periodization ────────────────────────────────────────────────────
+
+enum TrainingFocus {
+  STRENGTH
+  POWER
+  ENDURANCE
+  WEIGHT_LOSS
+  WEIGHT_MAINTENANCE
+  MASS_GAIN
+}
+
+model Goal {
+  id            String        @id @default(cuid())
+  trainingFocus TrainingFocus
+  hybridMode    Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workoutPlans WorkoutPlan[]
+}
+
+// ─── Workout Plan ────────────────────────────────────────────────────────────
+
+enum PhaseType {
+  STRENGTH_DOMINANT
+  ENDURANCE_DOMINANT
+  STANDARD
+}
+
+model WorkoutPlan {
+  id        String   @id @default(cuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  goalId String?
+  goal   Goal?   @relation(fields: [goalId], references: [id])
+
+  weeks WorkoutWeek[]
+
+  @@index([userId])
+}
+
+model WorkoutWeek {
+  id        String    @id @default(cuid())
+  weekNumber Int
+  phase     PhaseType @default(STANDARD)
+
+  planId String
+  plan   WorkoutPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  sessions WorkoutSession[]
+
+  @@index([planId])
+}
+
+model WorkoutSession {
+  id          String   @id @default(cuid())
+  dayOfWeek   Int      // 0 = Monday … 6 = Sunday
+  sessionType String   // e.g. "Strength", "Endurance", "Hybrid"
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  weekId String
+  week   WorkoutWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+
+  exercises Exercise[]
+  setLogs   SetLog[]
+
+  @@index([weekId])
+}
+
+model Exercise {
+  id          String  @id @default(cuid())
+  name        String
+  muscleGroup String
+  mediaUrl    String?  // video or image URL
+  mediaType   String?  // "video" | "image"
+  description String?  // fallback text description of proper form
+  orderIndex  Int
+
+  sessionId String
+  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  prescribedSets PrescribedSet[]
+
+  @@index([sessionId])
+}
+
+model PrescribedSet {
+  id           String  @id @default(cuid())
+  setNumber    Int
+  proposedReps Int
+  proposedWeight Float  // kg
+  restSeconds  Int
+
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  setLog SetLog?
+
+  @@index([exerciseId])
+}
+
+model SetLog {
+  id           String   @id @default(cuid())
+  actualReps   Int
+  actualWeight Float    // kg
+  restExtensionSeconds Int @default(0)
+  loggedAt     DateTime @default(now())
+
+  prescribedSetId String        @unique
+  prescribedSet   PrescribedSet @relation(fields: [prescribedSetId], references: [id], onDelete: Cascade)
+
+  sessionId String
+  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+// ─── Progress Photos ─────────────────────────────────────────────────────────
+
+enum PhotoView {
+  FRONT
+  SIDE
+  REAR
+}
+
+enum AnalysisStatus {
+  PENDING
+  COMPLETE
+  FAILED
+}
+
+model ProgressPhoto {
+  id        String    @id @default(cuid())
+  view      PhotoView
+  s3Key     String    @unique
+  date      DateTime  @db.Date
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  analysisResults PhotoAnalysisResult[]
+
+  @@index([userId])
+  @@index([userId, date])
+}
+
+model PhotoAnalysisResult {
+  id             String         @id @default(cuid())
+  analysisText   String
+  laggingAreas   String[]       // e.g. ["shoulders", "core"]
+  status         AnalysisStatus @default(PENDING)
+  analysisDate   DateTime       @default(now())
+
+  photoId String
+  photo   ProgressPhoto @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([photoId])
+}
+
+// ─── Nutrition Nudges ────────────────────────────────────────────────────────
+
+enum NudgeType {
+  STRENGTH
+  ENDURANCE
+  REST
+}
+
+model NutritionNudge {
+  id          String    @id @default(cuid())
+  nudgeType   NudgeType
+  nudgeText   String
+  displayedAt DateTime  @db.Date
+  createdAt   DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, displayedAt])
+  @@index([userId])
+}
