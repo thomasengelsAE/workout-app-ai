@@ -48,6 +48,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      fake-gcs-server:
+        image: fsouza/fake-gcs-server:latest
+        options: >-
+          --health-cmd "curl -f http://localhost:4443/ || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 4443:4443
+
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +72,12 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Create GCS bucket in emulator
+        run: |
+          curl -X POST 'http://localhost:4443/storage/v1/b' \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"fitness"}'
 
       - name: Generate Prisma client & run migrations
         run: |
@@ -79,10 +95,9 @@ jobs:
           AUTH_KEYCLOAK_SECRET: ${{ secrets.AUTH_KEYCLOAK_SECRET }}
           AUTH_KEYCLOAK_ISSUER: ${{ secrets.AUTH_KEYCLOAK_ISSUER }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          S3_BUCKET: fitness
-          S3_REGION: us-east-1
+          GCS_BUCKET: fitness
+          GCS_KEY_FILE_PATH: ""
+          STORAGE_EMULATOR_HOST: http://localhost:4443
           NEXTAUTH_URL: http://localhost:3001
           PLAYWRIGHT_BASE_URL: http://localhost:3001
 

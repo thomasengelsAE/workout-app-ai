@@ -3,8 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import { openai } from '@/lib/openai';
-import { s3, BUCKET } from '@/lib/s3';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { uploadObject, BUCKET } from '@/lib/gcs';
 import { PhotoView } from '@prisma/client';
 
 export type PhotoUploadResult =
@@ -35,24 +34,17 @@ export async function uploadProgressPhoto(
 
   const date = new Date();
   const dateStr = date.toISOString().split('T')[0];
-  const s3Key = `progress-photos/${user.id}/${dateStr}/${view.toLowerCase()}-${Date.now()}.jpg`;
+  const gcsKey = `progress-photos/${user.id}/${dateStr}/${view.toLowerCase()}-${Date.now()}.jpg`;
 
   const buffer = Buffer.from(base64Data.replace(/^data:[^;]+;base64,/, ''), 'base64');
 
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: BUCKET,
-      Key: s3Key,
-      Body: buffer,
-      ContentType: mimeType,
-    })
-  );
+  await uploadObject(gcsKey, buffer, mimeType);
 
   await prisma.progressPhoto.create({
     data: {
       userId: user.id,
       view,
-      s3Key,
+      s3Key: gcsKey,
       date,
     },
   });

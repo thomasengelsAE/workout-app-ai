@@ -3,10 +3,16 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
+      // Google Cloud Storage (production)
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+      },
+      // fake-gcs-server (local dev emulator)
       {
         protocol: 'http',
         hostname: 'localhost',
-        port: '9000',
+        port: '4443',
       },
     ],
   },

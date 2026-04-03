@@ -15,34 +15,28 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+  fake-gcs-server:
+    image: fsouza/fake-gcs-server:latest
+    command: -scheme http -port 4443 -backend memory
     ports:
-      - '9002:9000'
-      - '9003:9001'
-    volumes:
-      - minio_data:/data
+      - '4443:4443'
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
-      interval: 10s
+      test: ['CMD', 'curl', '-f', 'http://localhost:4443/']
+      interval: 5s
       timeout: 5s
-      retries: 3
+      retries: 5
 
-  minio-setup:
-    image: minio/mc:latest
+  fake-gcs-setup:
+    image: curlimages/curl:latest
     depends_on:
-      minio:
+      fake-gcs-server:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin &&
-      mc mb --ignore-existing local/fitness &&
-      mc anonymous set none local/fitness &&
-      echo 'MinIO bucket ready'
+      curl -X POST 'http://fake-gcs-server:4443/storage/v1/b'
+        -H 'Content-Type: application/json'
+        -d '{\"name\":\"fitness\"}'
+      && echo 'GCS bucket ready'
       "
 
   keycloak:
@@ -78,4 +72,3 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
